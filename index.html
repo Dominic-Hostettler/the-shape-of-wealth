@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Interactive visualization of global wealth distribution — scroll to zoom from the full population down to the richest individuals on Earth.">
+<meta property="og:title" content="The Shape of Wealth — Die Form des Reichtums">
+<meta property="og:description" content="Interactive visualization of global wealth distribution — zoom down to the richest person on Earth.">
+<meta property="og:type" content="website">
+<title>The Shape of Wealth — Die Form des Reichtums</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%230b0d12'/%3E%3Cpath d='M1 15h14V3l-3 12z' fill='%23ffc357'/%3E%3C/svg%3E">
+<style>
+  @font-face { font-family:'Unbounded'; font-style:normal; font-weight:100 900; font-display:swap;
+    src:url('unbounded-latin.woff2') format('woff2');
+    unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+  @font-face { font-family:'Unbounded'; font-style:normal; font-weight:100 900; font-display:swap;
+    src:url('unbounded-latin-ext.woff2') format('woff2');
+    unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+  * { margin:0; box-sizing:border-box; font-family:system-ui,-apple-system,sans-serif; }
+  body { background:#0b0d12; color:#e8eaf0; padding:16px; max-width:950px; margin:auto; position:relative; }
+  h1 { font-family:'Unbounded',system-ui,sans-serif; font-size:1.15rem;
+       text-align:center; font-weight:700; letter-spacing:.04em; color:#f0f2f8;
+       margin-top:24px; }
+  #lang { position:absolute; top:14px; right:16px; font-size:.75rem; color:#5d6579; }
+  #lang a { cursor:pointer; color:#8b93a5; }
+  #lang a.on { color:#ffc357; font-weight:700; }
+
+
+  svg { user-select:none; -webkit-user-select:none; width:100%; max-height:92vh; display:block; }
+  #rich text { user-select:text; -webkit-user-select:text; cursor:text; }
+  .src { font-size:.68rem; color:#424a5c; text-align:center; margin-top:14px; line-height:1.5; }
+</style>
+</head>
+<body>
+
+<div id="lang"><a id="lde">DE</a> · <a id="len">EN</a></div>
+<h1 data-i18n="title">The shape of wealth — Die Form des Reichtums</h1>
+
+<svg id="chart" viewBox="-32 0 512 432" width="100%">
+  <defs>
+    <clipPath id="clip"><rect x="52" y="45" width="315" height="325"/></clipPath>
+  </defs>
+
+  <g id="yzone" style="cursor:ns-resize;touch-action:none;user-select:none">
+    <rect x="2" y="45" width="46" height="325" rx="9" fill="#161b26"/>
+    <text x="-7" y="207" font-size="13" fill="#cfd6e4" text-anchor="middle" font-style="italic" transform="rotate(-90 -7 207)" data-i18n="scroll">scroll here</text>
+    <g id="ylab" font-size="9.5" fill="#8b93a5" text-anchor="end"></g>
+  </g>
+  <g id="grid"></g>
+  <line x1="52" y1="45"  x2="52"  y2="370" stroke="#3a4256"/>
+  <line x1="52" y1="370" x2="367" y2="370" stroke="#3a4256"/>
+
+  <g id="scrollzone" style="cursor:ew-resize;touch-action:none;user-select:none">
+    <rect x="44" y="372" width="331" height="40" rx="9" fill="#161b26"/>
+    <g id="xtick" stroke="#4a5468"></g>
+    <g id="xlab" font-size="9.5" fill="#8b93a5" text-anchor="middle"></g>
+    <text x="209" y="425" font-size="13" fill="#cfd6e4" text-anchor="middle" font-style="italic" data-i18n="scroll">scroll here</text>
+  </g>
+  <text x="390" y="385" font-size="9.5" fill="#6f7789" data-i18n="pop">population</text>
+  <text x="47" y="38" font-size="9.5" fill="#6f7789" text-anchor="end" data-i18n="wealth">wealth</text>
+
+  <path id="shape" fill="#ffc357" clip-path="url(#clip)"/>
+  <path id="shape3" fill="#ffc357" clip-path="url(#clip)"/>
+  <path id="shape2" fill="#ffc357" clip-path="url(#clip)"/>
+
+  <line id="eqline" x1="52" x2="367" stroke="#2ee6a8" stroke-width="1.5" stroke-dasharray="6 5" opacity=".85"/>
+  <g id="anno"></g>
+  <g id="rich"></g>
+  <rect id="plotzone" x="52" y="45" width="315" height="325" fill="transparent" style="cursor:move;touch-action:none;user-select:none"/>
+</svg>
+
+<div class="src">UBS Global Wealth Report 2024 · World Inequality Report 2022 ·
+Bloomberg Billionaires Index 2026 · <a href="/impressum" style="color:#8b93a5">Impressum</a></div>
+
+<script>
+const X0=52,X1=367,Y0=370,Y1=45,PH=Y0-Y1,N=2000;
+const TOTAL_T=470,ADULTS=5.9e9,FAIR=TOTAL_T*1e12/ADULTS,RICHEST=865e9;
+
+const PX=[0,.25,.5,.75,.9,.95,.99,.995,.999,.9995,.9999,.99995,1];
+const PY=[0,.005,.02,.06,.15,.25,.55,.63,.82,.86,.90,.92,1];
+
+function pchip(x,y){
+  const n=x.length,d=[],m=new Array(n);
+  for(let i=0;i<n-1;i++)d.push((y[i+1]-y[i])/(x[i+1]-x[i]));
+  m[0]=d[0];m[n-1]=d[n-2];
+  for(let i=1;i<n-1;i++){
+    if(d[i-1]*d[i]<=0){m[i]=0;continue;}
+    const h0=x[i]-x[i-1],h1=x[i+1]-x[i];
+    m[i]=((2*h1+h0)+(h1+2*h0))/((2*h1+h0)/d[i-1]+(h1+2*h0)/d[i]);
+  }
+  return v=>{
+    let i=0;while(i<n-2&&v>x[i+1])i++;
+    const h=x[i+1]-x[i],t=(v-x[i])/h,t2=t*t,t3=t2*t;
+    return (2*t3-3*t2+1)*y[i]+(t3-2*t2+t)*h*m[i]+(-2*t3+3*t2)*y[i+1]+(t3-t2)*h*m[i+1];
+  };
+}
+const L=pchip(PX,PY);
+
+const dens=new Float64Array(N+1);
+for(let i=0;i<N;i++)dens[i]=(L((i+1)/N)-L(i/N))*N;
+dens[N]=RICHEST/FAIR;
+
+let peak=0;for(const v of dens)if(v>peak)peak=v;
+
+const cur=new Float64Array(N+1),tgt=new Float64Array(N+1);
+tgt.set(dens);
+
+const views=[
+  {x0:0,      x1:1, next:'🔍 Top 30%'},
+  {x0:.7,     x1:1, next:'🔍 Top 10%'},
+  {x0:.9,     x1:1, next:'🔍 Top 1%'},
+  {x0:.99,    x1:1, next:'🔍 Top 0.01%'},
+  {x0:.9999,  x1:1, next:'🔍 Top 0.0001%'},
+  {x0:.999999,x1:1, next:'🔍 Top 0.00001%'},
+  {x0:.9999999,x1:1,next:'↩ Full view'},
+];
+const FULLY=Math.ceil(peak*1.08),YMIN=4;
+const STARTX=.9999,STARTY=Math.round(110e9/FAIR);
+let vz=0,vx0=STARTX,vx1=1,ty=0,tyMax=STARTY;
+let cvx0=STARTX,cvx1=1,cyMax=STARTY;
+let introT=performance.now()+500;
+
+const yOf=v=>Y0-(v/cyMax)*PH;
+const xOf=p=>X0+(p-cvx0)/(cvx1-cvx0)*(X1-X0);
+const shape=document.getElementById('shape'),
+      shape2=document.getElementById('shape2'),
+      shape3=document.getElementById('shape3'),
+      svgNS='http://www.w3.org/2000/svg';
+
+const TW=[[1.7e-10,865e9],[1.7e-9,200e9],[1.7e-8,30e9],[4.7e-7,1.2e9],[1e-5,70e6],[5e-5,25e6],[2e-4,12e6]];
+const WM=TW[0][1],W0=TW[TW.length-1][1],lr=Math.log;
+function tw(r){
+  for(let i=0;i<TW.length-1;i++){const a=TW[i],b=TW[i+1];
+    if(r>=a[0]&&r<=b[0]){const t=(lr(r)-lr(a[0]))/(lr(b[0])-lr(a[0]));
+      return Math.exp(lr(a[1])+(lr(b[1])-lr(a[1]))*t);}}
+  return r<TW[0][0]?WM:W0;
+}
+
+const money=v=>{
+  const de=lang==='de';
+  if(v>=1e9)return '$'+Math.round(v/1e9)+(de?' Mia':' B');
+  if(v>=1e6){const n=(v/1e6).toFixed(1);return '$'+(de?n.replace('.',','):n)+(de?' Mio':' M');}
+  return '$'+(v>=1000?Math.round(v).toLocaleString(de?'de-DE':'en-US'):Math.round(v));
+};
+
+function drawGrid(){
+  const g=document.getElementById('grid');g.innerHTML='';
+  const yl=document.getElementById('ylab');yl.innerHTML='';
+  const top=cyMax*FAIR,raw=top/6,p=Math.pow(10,Math.floor(Math.log10(raw)));
+  const f=raw/p,step=(f>=5?5:f>=2.5?2.5:1)*p;
+  for(let k=0,n=Math.floor(top/step)+1;k<n;k++){
+    const y=yOf(k*step/FAIR);
+    const l=document.createElementNS(svgNS,'line');
+    l.setAttribute('x1',X0);l.setAttribute('x2',X1);l.setAttribute('y1',y);l.setAttribute('y2',y);
+    l.setAttribute('stroke','#1d2331');g.appendChild(l);
+    const t=document.createElementNS(svgNS,'text');
+    t.setAttribute('x',47);t.setAttribute('y',y+3.5);
+    t.textContent=k?money(k*step):'$0';yl.appendChild(t);
+  }
+}
+
+function drawAnno(){
+  const g=document.getElementById('anno');g.innerHTML='';
+  const add=(x,y,s,fs,f,o)=>{
+    const t=document.createElementNS(svgNS,'text');
+    t.setAttribute('x',x);t.setAttribute('y',y);t.setAttribute('font-size',fs);
+    t.setAttribute('fill',f);if(o)for(const k in o)t.setAttribute(k,o[k]);
+    t.textContent=s;g.appendChild(t);
+  };
+  document.getElementById('eqline').setAttribute('y1',yOf(1));
+  document.getElementById('eqline').setAttribute('y2',yOf(1));
+  if(cyMax>1.2)add(56,yOf(1)-6,T[lang].eq,9.5,'#2ee6a8',{'font-style':'italic'});
+}
+
+const xMarks=[];
+{ const g=document.getElementById('xlab'),tk=document.getElementById('xtick');
+  for(let pc=0;pc<=100;pc+=10){
+    const e=document.createElementNS(svgNS,'text');
+    e.setAttribute('y',385);e.textContent=pc+'%';g.appendChild(e);
+    xMarks.push({p:pc/100,e});
+  }
+  [95,99,99.9,99.99,99.999,99.9999].forEach(pc=>{
+    const e=document.createElementNS(svgNS,'text');
+    e.setAttribute('y',398);e.textContent=pc+'%';g.appendChild(e);
+    const l=document.createElementNS(svgNS,'line');
+    l.setAttribute('y1',370);l.setAttribute('y2',376);tk.appendChild(l);
+    xMarks.push({p:pc/100,e,l,sm:1});
+  });
+  [100,12].forEach(n=>{
+    const e=document.createElementNS(svgNS,'text');
+    e.setAttribute('y',398);e.textContent='top '+n;g.appendChild(e);
+    const l=document.createElementNS(svgNS,'line');
+    l.setAttribute('y1',370);l.setAttribute('y2',376);tk.appendChild(l);
+    xMarks.push({p:1-n/ADULTS,e,l,sm:1});
+  });
+  xMarks.sort((a,b)=>a.p-b.p);
+}
+const RICH=[['Elon Musk',865e9],['Larry Page',390e9],['Larry Ellison',330e9],['Mark Zuckerberg',250e9],
+  ['Jeff Bezos',240e9],['Bernard Arnault',200e9],['Steve Ballmer',180e9],['Jensen Huang',170e9],
+  ['Warren Buffett',150e9],['Bill Gates',105e9],['Michael Bloomberg',105e9],
+  ['Rupert Murdoch',24e9],['George Soros',7e9],['Donald Trump',6e9],['Mark Cuban',6e9],
+  ['Michael Jordan',3.5e9],['Richard Branson',3e9],['Oprah Winfrey',3e9],['Taylor Swift',1.6e9]];
+const richEls=[];
+{ const g=document.getElementById('rich');
+  for(const [n,w] of RICH){
+    const c=document.createElementNS(svgNS,'circle');
+    c.setAttribute('r',2.2);c.setAttribute('cx',X1+2);c.setAttribute('fill','#e8eaf0');
+    g.appendChild(c);
+    const t=document.createElementNS(svgNS,'text');
+    t.setAttribute('x',X1+7);t.setAttribute('font-size',8.5);t.setAttribute('fill','#aab2c5');
+    t.textContent=n;g.appendChild(t);
+    richEls.push({w,c,t});
+  }
+}
+function updRich(){
+  let ly=-1e9;
+  for(const r of richEls){
+    const y=yOf(r.w/FAIR);
+    const vis=y<=Y0+2&&y>=Y1-2000?'':'none';
+    r.c.setAttribute('cy',Math.max(Y1-2000,y));r.c.setAttribute('display',vis);
+    const show=vis===''&&y-ly>11;
+    r.t.setAttribute('y',y+2.5);r.t.setAttribute('display',show?'':'none');
+    if(show)ly=y;
+  }
+}
+
+function updX(){
+  const last={m:-1e9,s:-1e9};
+  for(const m of xMarks){
+    const x=X0+(m.p-cvx0)/(cvx1-cvx0)*(X1-X0);
+    const k=m.sm?'s':'m';
+    const vis=x>X0-4&&x<X1+4&&x-last[k]>16?'':'none';
+    if(vis==='')last[k]=x;
+    m.e.setAttribute('x',x);m.e.setAttribute('display',vis);
+    if(m.l){m.l.setAttribute('x1',x);m.l.setAttribute('x2',x);m.l.setAttribute('display',vis);}
+  }
+}
+
+function buildPath(){
+  const P=[];let i;
+  const yc=v=>Math.max(Y1-2000,yOf(v));
+  const xc=p=>Math.min(X1+40,Math.max(X0-40,xOf(p)));
+  const cut=yc(cur[Math.floor(0.99*N)]);
+  for(i=0;i<N;i+=4)P.push([xc((i+0.5)/N),(i+0.5)/N>0.99?cut:yc(cur[i])]);
+  P.push([X1,cut]);
+  P.push([X1,cut]);
+  let s=`M${P[0][0].toFixed(1)} ${P[0][1].toFixed(1)}`;
+  for(let k=1;k<P.length;k++)s+=` L${P[k][0].toFixed(1)} ${P[k][1].toFixed(1)}`;
+  return s+` L${X1} ${Y0} L${X0} ${Y0} Z`;
+}
+
+function buildPath2(){
+  const M=60,pts=[];
+  for(let k=0;k<M;k++){
+    const r=Math.exp(lr(2e-4)+(lr(1.7e-10)-lr(2e-4))*k/(M-1));
+    const x=Math.min(X1+40,Math.max(X0-40,xOf(1-r)));
+    const y=Y0-(lr(tw(r))-lr(W0))/(lr(WM)-lr(W0))*(Y0-yOf(WM/FAIR));
+    pts.push([x,Math.max(Y1-2000,y)]);
+  }
+  let s=`M${X0} ${Y0}`;
+  for(const p of pts)s+=` L${p[0].toFixed(1)} ${p[1].toFixed(1)}`;
+  return s+` L${X1} ${Y0} Z`;
+}
+
+function buildPath3(){
+  const M=80,pts=[];let prevW=0;
+  const SK=[];for(let i=5;i<PX.length-1;i++)SK.push([(PX[i]+PX[i+1])/2,(PY[i+1]-PY[i])/(PX[i+1]-PX[i])]);
+  const slp=p=>{
+    if(p<=SK[0][0])return SK[0][1];
+    for(let i=0;i<SK.length-1;i++){const a=SK[i],b=SK[i+1];
+      if(p<=b[0])return a[1]*Math.pow(b[1]/a[1],(p-a[0])/(b[0]-a[0]));}
+    return SK[SK.length-1][1];
+  };
+  for(let k=0;k<M;k++){
+    const r=Math.exp(lr(1e-2)+(lr(1e-7)-lr(1e-2))*k/(M-1));
+    const p=1-r;
+    const w=Math.max(prevW,slp(p), r<=2e-4?tw(r)/FAIR:0);
+    prevW=w;
+    const x=Math.min(X1+40,Math.max(X0-40,xOf(p)));
+    pts.push([x,Math.max(Y1-2000,yOf(w))]);
+  }
+  pts[0][1]=Math.max(Y1-2000,yOf(cur[Math.floor(0.99*N)]));
+  const a=pts[M-2],b=pts[M-1];
+  b[1]=Math.max(Y1-2000,a[1]+(b[1]-a[1])*5);
+  let s=`M${pts[0][0].toFixed(1)} ${Y0}`;
+  for(const p of pts)s+=` L${p[0].toFixed(1)} ${p[1].toFixed(1)}`;
+  return s+` L${X1} ${Y0} Z`;
+}
+
+let dirty=true;
+function frame(){
+  for(let i=0;i<=N;i++){
+    const df=tgt[i]-cur[i];
+    if(Math.abs(df)>1e-4){cur[i]+=df*0.13;dirty=true;}
+  }
+  if(introT){
+    const e=Math.min(1,Math.max(0,(performance.now()-introT)/5000));
+    const s=e<.5?16*e*e*e*e*e:1-Math.pow(-2*e+2,5)/2;
+    cvx0=STARTX*(1-s);cvx1=1;
+    cyMax=Math.exp(Math.log(STARTY)+(Math.log(FULLY)-Math.log(STARTY))*s);
+    drawGrid();drawAnno();dirty=true;
+    if(e>=1){introT=0;vx0=0;tyMax=FULLY;}
+  }else if(cvx0!==vx0||cvx1!==vx1||cyMax!==tyMax){
+    cvx0+=(vx0-cvx0)*0.08;cvx1+=(vx1-cvx1)*0.08;
+    cyMax*=Math.exp((Math.log(tyMax)-Math.log(cyMax))*0.08);
+    if(Math.abs(vx0-cvx0)<1e-6&&Math.abs(vx1-cvx1)<1e-6){cvx0=vx0;cvx1=vx1;}
+    if(Math.abs(tyMax-cyMax)<tyMax*1e-3)cyMax=tyMax;
+    drawGrid();drawAnno();dirty=true;
+  }
+  if(dirty){shape.setAttribute('d',buildPath());updX();updRich();
+    shape3.setAttribute('d',buildPath3());
+    shape2.setAttribute('d',buildPath2());
+    dirty=false;}
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+function setZoomPos(z){
+  vz=Math.max(0,Math.min(6,z));
+  const i=Math.min(5,Math.floor(vz)),t=vz-i,a=views[i],b=views[i+1];
+  vx0=a.x0+(b.x0-a.x0)*t;vx1=1;
+}
+const sz=document.getElementById('scrollzone');
+sz.addEventListener('wheel',e=>{
+  e.preventDefault();introT=0;setZoomPos(vz-e.deltaY*0.0015);
+},{passive:false});
+let dragX=null;
+sz.addEventListener('pointerdown',e=>{e.preventDefault();dragX=e.clientX;sz.setPointerCapture(e.pointerId);});
+sz.addEventListener('pointermove',e=>{
+  if(dragX===null)return;
+  introT=0;setZoomPos(vz+(dragX-e.clientX)*0.008);dragX=e.clientX;
+});
+sz.addEventListener('pointerup',()=>dragX=null);
+sz.addEventListener('pointercancel',()=>dragX=null);
+
+function setYPos(t){
+  ty=Math.max(0,Math.min(1,t));
+  tyMax=Math.exp(Math.log(FULLY)+(Math.log(YMIN)-Math.log(FULLY))*ty);
+}
+const yz=document.getElementById('yzone');
+yz.addEventListener('wheel',e=>{
+  e.preventDefault();introT=0;setYPos(ty-e.deltaY*0.002);
+},{passive:false});
+let dragY=null;
+yz.addEventListener('pointerdown',e=>{e.preventDefault();dragY=e.clientY;yz.setPointerCapture(e.pointerId);});
+yz.addEventListener('pointermove',e=>{
+  if(dragY===null)return;
+  introT=0;setYPos(ty+(dragY-e.clientY)*0.004);dragY=e.clientY;
+});
+
+const pz=document.getElementById('plotzone');
+let pd=null;
+pz.addEventListener('pointerdown',e=>{e.preventDefault();pd=[e.clientX,e.clientY];pz.setPointerCapture(e.pointerId);});
+pz.addEventListener('pointermove',e=>{
+  if(pd===null)return;introT=0;
+  setZoomPos(vz+(pd[0]-e.clientX)*0.008);
+  setYPos(ty+(pd[1]-e.clientY)*0.004);
+  pd=[e.clientX,e.clientY];
+});
+['pointerup','pointercancel'].forEach(ev=>pz.addEventListener(ev,()=>pd=null));
+yz.addEventListener('pointerup',()=>dragY=null);
+yz.addEventListener('pointercancel',()=>dragY=null);
+
+
+const T={
+  en:{doc:'The Shape of Wealth',title:'The shape of wealth',wealth:'wealth',
+      pop:'population',scroll:'scroll here',eq:'equal share ≈ $80,000'},
+  de:{doc:'Die Form des Reichtums',title:'Die Form des Reichtums',wealth:'Vermögen',
+      pop:'Bevölkerung',scroll:'hier scrollen',eq:'gleicher Anteil ≈ 80.000 $'},
+};
+let lang=localStorage.getItem('tsw-lang')||(navigator.language.slice(0,2)==='de'?'de':'en');
+const lde=document.getElementById('lde'),len=document.getElementById('len');
+function setLang(l){
+  lang=l;localStorage.setItem('tsw-lang',l);
+  document.documentElement.lang=l;document.title=T[l].doc;
+  document.querySelectorAll('[data-i18n]').forEach(e=>e.textContent=T[l][e.dataset.i18n]);
+  lde.classList.toggle('on',l==='de');len.classList.toggle('on',l==='en');
+}
+lde.onclick=()=>{setLang('de');drawGrid();drawAnno();};
+len.onclick=()=>{setLang('en');drawGrid();drawAnno();};
+
+setLang(lang);
+drawGrid();drawAnno();updX();updRich();
+</script>
+</body>
+</html>
